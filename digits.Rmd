@@ -1,32 +1,49 @@
 ---
-title: "Klasyfikacja odręcznie pisanych cyfr za pomocą sieci neuronowych"
-author: "Piotr Zawal"
-date: "31 lipca 2019"
 output:
   pdf_document: default
   html_document: default
+header-includes:
+  - \usepackage{pdfpages}
 ---
-#https://www.r-bloggers.com/exploring-handwritten-digit-classification-a-tidy-analysis-of-the-mnist-dataset/
-Deep neural networks with ~99.8% accuracy
-#http://repository.supsi.ch/5145/1/IDSIA-04-12.pdf
-# https://www.kaggle.com/kobakhit/digital-recognizer-in-r
-!!!!
-#https://rrighart.github.io/Digits/
-!!!!
-#https://www.kaggle.com/srlmayor/easy-neural-network-in-r-for-0-994
-# http://varianceexplained.org/r/digit-eda/
+\includepdf[pages={-}]{titlepage.pdf}
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 # Wstęp
 
-Wczytanie potrzebnych bibliotek:
-```{r, warning = FALSE, results = 'hide'}
+## Zbiór MNIST
+Zbiór MNIST (ang. Modified National Institute of Standards and Technology) jest dużym zbiorem zawierającym odręcznie pisane cyfry. Składa się z przetworzonych zdjęć cyfr, napisanych przez studentów liceów i pracowników agencji United States Census Bureau. Dane te są często wykorzystywane w uczeniu maszynowym lub jako benchmark, szczególnie dla prostszych modeli.
+Oryginalny zbiór składa się z 60 000 cyfr w zbiorze treningowym i 10 000 w zbiorze testowym. Każdy obraz ma rozmiar 28x28 pikseli i jest w trybie monochromatycznym (skali szarości).
+
+## Sztuczne sieci neuronowe
+Działanie sztucznych sieci neuronowych jest luźno inspirowane działaniem ludzkiego układu nerwowego. Zbudowany jest on z neuronów połączonych przez synapsy, a przetwarzanie informacji odbywa się w nim poprzez zmianę siły połączenia synaptycznego.
+W sztucznej sieci neuronowej (ang. _artificial neural network_, ANN) sztuczny neuron składa się z wielu wejść. Informacje z tych wejść są następnie sumowane z odpowiednimi wagami (analogia do synaps) i następnie poddawane działaniu funkcji aktywacji (analogia do różnych reguł uczenia w neuronach). Sygnał wyjściowy może być podany do warstwy wyjściowej bądź - jeśli jest to głęboka sieć neuronowa - do kolejnych warstw.
+
+## Konwolucyjne sieci neuronowe
+
+Konwolucyjne sieci neuronowe (ang. _convolutional neural networks_, CNNs) potrafią filtrować poszczególne części danych i wyostrzać w nich pewne cechy. Pozwala to na lepszą dyskryminację w procesach rozpoznawania i klasyfikacji wzorców. CNN zbudowane są z jednej lub wielu warstw konwolucyjnych, których informacja wyjściowa podawana jest na wejście klasycznej sztucznej sieci neuronowej.
+Ekstrakcja cech z obrazu odbywa się poprzez przesuwaniu wzdłuż obrazu filtru, dokonującego operacji splotu (konwolucji) pomiędzy analizowanym fragmentem a filtrem, tworząc "mapę cech". Następnie, w celu ograniczenia liczby parametrów, przeprowadza się redukcję mapy. Tak przetworzone dane są dalej poddawane spłaszczeniu, czyli redukcji wymiarowości macierzy (np. z macierzy 2x2 na jednowymiarowy wektor wymagany przez klasyczną sieć neuronową).
+Fakt wykorzystania wielowymiarowych filtrów sprawia, że CNN dobrze nadają się do analizy obrazów (zarówno 2D jak i 3D), ponieważ zachowane są korelacje przestrzenne pomiędzy poszczególnymi pikselami. Pozwala to na ekstrakcję cech niemożliwą do osiągnięcia w przypadku jednokrokowej redukcji wymiarowości obrazu. Z tego powodu ten rodzaj sieci jest często wykorzystywany w rozpoznawaniu wzorców na obrazach, np. detekcji twarzy w aparatach fotograficznych.
+
+## Kaggle
+Kaggle jest platformą pozwalającą na udział w konkursach dotyczących analizy danych. Część konkursów jest oferowana przez komercyjne firmy, oferujące nagrody pieniężne za opracowanie modeli do predykcji danych. Celem innych konkursów jest przede wszystkim wymiana pomysłów i umiejętności osób ze społeczności analityków danych oraz edukacja. Jednym z konkursów edukacyjnych, pozwalających na zapoznanie się z technikami uczenia maszynowego, jest przedstawiony w tej pracy konkurs polegający na opracowaniu modelu rozpoznającego odręcznie pisane cyfry.
+
+
+### Konkurs Digit Recognizer
+Celem konkursu jest walidacja modelu rozpoznającego cyfry ze zbioru MNIST. Konkurs jest traktowany jako edukacyjny - obecnie głębokie sieci neuronowe zdolne są do rozpoznawania znacznie bardziej skomplikowanych obrazów (np. baza ImageNet) niż te w zbiorze MNIST, dlatego konkurs traktuje się jako przygotowujący do bardziej skomplikowanych zadań. Stanowi on jednak dobry punkt wyjścia do rozpoczęcia pracy z sieciami neuronowymi.
+
+# Analiza danych
+
+Analizę danych wykonano przy użycia języka R z wykorzystaniem poniższych bibliotek:
+
+```{r, warning = FALSE, results = 'hide', message = FALSE}
 library(ggplot2) # rysowanie wykresów
 library(readr) # czytanie plików CSV
 library(dplyr) # porządkowanie danych
 library(tidyr) # porządkowanie danych
-library(purrr) # ???
+library(keras) # API do tworzenia sieci neuronowych
+library(knitr) # tabele
 
 # ustal ziarno dla powtarzalności wyników
 set.seed(123)
@@ -34,8 +51,9 @@ set.seed(123)
 # ustaw styl wykresów
 theme_set(theme_light())
 ```
+## Analiza eksploracyjna
 
-Dane są podzielone na zbiór treningowy i testowy i zapisane w plikach *.csv.
+Dane pobrane z Kaggle są podzielone na zbiór treningowy i testowy i zapisane w plikach *.csv.
 ```{r}
 # wczytaj dane
 train <-  read.csv("./train.csv")
@@ -43,13 +61,13 @@ test <- read.csv("./test.csv")
 ```
 
 Zbiór treningowy zawiera 42 000 obserwacji, a testowy 28 000. 
-```{r}
+```{r, echo = FALSE}
 # rozmiar zbioru treningowego i testowego
-dim(train)
-dim(test)
+cat("Zbiór treningowy: ", dim(train), "\n")
+cat("Zbiór testowy: ", dim(test))
 ```
-W zbiorze treningowym pojawia się kolumna *label*, zawierająca klasę każdej cyfry. Kolumna ta nie pojawia się w zbiorze testowym, który ma 784 kolumny. W kolumnach zapisano wartośc liczbową w zakresie [0, 255], odpowiadającą kolorowi piksela w skali szarości. Taka struktura danych jest jednowymiarową reprezentacją macierzy 28x28, której wykreślenie w dalszej części pracy pozwoli na wizualizację cyfr. Powodem takiej formy danych jest to, że jest ona już przygotowana do implementacji w algorytmach uczenia maszynowego.
-
+W zbiorze treningowym pojawia się kolumna *label*, zawierająca klasę każdej cyfry. Kolumna ta nie pojawia się w zbiorze testowym, który ma 784 kolumny. Nie jest to więc klasyczny zbiór testowy służący ewaluacji model, ponieważ taki zawiera prawdziwe etykiety, które pozwalają na walidację predykcji.
+W kolumnach zapisano wartośc liczbową w zakresie [0, 255], odpowiadającą kolorowi piksela w skali szarości. Taka struktura danych jest jednowymiarową reprezentacją macierzy 28x28 ($\sqrt{784} = 28$), której wykreślenie w dalszej części pracy pozwoli na wizualizację cyfr. Powodem takiej struktury danych jest to, że jest ona już przygotowana do implementacji w algorytmach uczenia maszynowego.
 
 ```{r, fig.height = 3, fig.width=5, fig.align='center'}
 # rozkład liczby obserwacji (cyfr) w zbiorze treningowym i testowym
@@ -61,15 +79,10 @@ ggplot(train, aes(x = label)) +
     ylab("liczba obserwacji")
 
 ```
-# Analiza eksploracyjna
-Wymiary macierzy: $\sqrt{784} = 28$, zatem wymiary obrazka to $28 \times 28$ pikseli. 
-Tak wygląda losowo wybrana cyfra po transformacji z wektora do macierzy 28x28.
+## Wizualizacja zbioru danych
 
-```{r}
-matrix(train[15, -1], nrow = 28, ncol = 28, byrow = TRUE) %>%
-    write.table(row.names = FALSE, col.names = FALSE, sep = "  ")
-```
-W celu wykonania lepszej jakości obrazów przekształcimy dane do postaci dwuwymiarowej.
+W celu wizualizacji cyfr, dane przekształcono do postaci dwuwymiarowej macierzy 28x28:
+
 ```{r}
 train_2dim <- train %>%
                 head(1000) %>%
@@ -101,37 +114,9 @@ train_2dim %>%
 
 ```
 
-Obrazowanie danych w postaci dwuwymiarowej będzie wykorzystywane kilkukrotnie podczas analizy zbioru, dlatego zdefiniowano funkcję `{r}printDigits()`. Argumentami funkcji jest cyfra, która będzie wykreślona (digit) oraz liczba paneli (domyślna wartość argumentu numOfDigits to 16).
+W celu obrazowania danych w postaci dwuwymiarowej zdefiniowano funkcję printDigits(). Argumentami funkcji jest cyfra, która będzie wykreślona (*digit*), liczba paneli (domyślna wartość argumentu *numOfDigits* to 16) oraz argument logiczny *plotRandom* (domyślna wartość TRUE) określający, czy dobór liczb do wizualizacji ma odbywać się w sposób losowy.
 
-```{r}
-printDigits <- function(digit, numOfDigits = 16) {
-    if (!require("gridExtra")) install.packages("gridExtra")
-    
-    plots <- list()
-
-    for (i in 1:numOfDigits) {
-    
-        digits_data <- train[train$label == digit, ] %>% sample_n(1)
-        
-        plots [[i]] <- digits_data %>%
-            gather() %>%
-            filter( key != "label") %>%
-            mutate(row = row_number() - 1) %>%
-            mutate(col = row %% 28, row = row %/% 28) %>%
-            ggplot() +
-            geom_tile(aes(col, 28 - row, fill = value), show.legend = FALSE) +
-            scale_fill_gradient(low = "white", high = "black") +
-            coord_equal() +
-            theme_void() +
-            theme(plot.background = element_rect(fill = "gray80"))
-    }
-
-do.call("grid.arrange", c(plots, ncol = 4, nrow = ceiling(numOfDigits / 4)))
-}
-```
-
-
-```{r}
+```{r, message = FALSE, warning=FALSE}
 printDigits <- function(dataset, digit, numOfDigits = 16, plotRandom = TRUE) {
     if (!require("gridExtra")) install.packages("gridExtra")
     
@@ -142,7 +127,6 @@ printDigits <- function(dataset, digit, numOfDigits = 16, plotRandom = TRUE) {
         if (plotRandom) {
             digits_data <- dataset[dataset$label == digit, ] %>% sample_n(1)  
         } else {
-            
             digits_data <- dataset[dataset$label == digit, ][i, ]
         }
         
@@ -156,8 +140,7 @@ printDigits <- function(dataset, digit, numOfDigits = 16, plotRandom = TRUE) {
             geom_tile(aes(col, 28 - row, fill = value), show.legend = FALSE) +
             scale_fill_gradient(low = "white", high = "black") +
             coord_equal() +
-            theme_void() +
-            theme(plot.background = element_rect(fill = "gray80"))
+            theme_void()
     }
 
 do.call("grid.arrange", c(plots, ncol = 4, nrow = ceiling(numOfDigits / 4)))
@@ -166,12 +149,15 @@ do.call("grid.arrange", c(plots, ncol = 4, nrow = ceiling(numOfDigits / 4)))
 
 
 Z pomocą tej funkcji łatwo będzie można wykreślić losowo wybrane cyfry, np:
-```{r, fig.height = 3, fig.width=5, fig.align='center'}
+```{r, fig.height = 3, fig.width=5, fig.align='center', message = FALSE, warning=FALSE}
+printDigits(train, 0)
 printDigits(train, 2)
+printDigits(train, 9)
 ```
 
 
-Data exploration
+Docelowo dane powinny być przekształcone ze skali szarości do skali zawierającej tylko dwa skrajne kolory: czarny i biały. Sprawdzono, jak wygląda rozkład wartości zapisanych w pikselach, gdzie 0 odpowiada kolorowi białemu a 255 czarnemu; wartości pośrednie reprezentują różne odcienie szarości.
+
 ```{r, fig.height = 3, fig.width=5, fig.align='center'}
 ggplot(train_2dim, aes(value)) + 
     geom_histogram(binwidth = 10) + 
@@ -179,8 +165,8 @@ ggplot(train_2dim, aes(value)) +
     ylab("suma obserwacji") + 
     ggtitle("Histogram wartości zapisanych w pikselu")
 ```
-
-Histogram z wyłączeniem - wynika z niego, że dominującą wartością jest 255 (kolor czarny), cyfry powinny mieć więc dobrze zdefiniowane kontury.
+Największa suma obserwacji jest dla wartości "0" - na każdym obrazie cyfry dominuje kolor biały, stanowiący tło.
+Histogram z wyłączeniem koloru białego - wynika z niego, że dominującą wartością jest 255 (kolor czarny), cyfry powinny mieć więc dobrze zdefiniowane kontury.
 ```{r, fig.height = 3, fig.width=5, fig.align='center'}
 train_2dim %>%
     filter(value != 0) %>%    
@@ -188,10 +174,10 @@ train_2dim %>%
     geom_histogram(binwidth = 10) +
     xlab("wartość piksela") +
     ylab("suma obserwacji") + 
-    ggtitle("Histogram wartości zapisanych w pikselu z pominięciem wartości 0")
+    ggtitle("Histogram wartości zapisanych w pikselu \nz pominięciem wartości 0")
 ```
 
-Liczymy jak wygląda "średnia" cyfra:
+Obliczono średnią dla każdego piksela, pozwalając na wizualizację cyfr uśrednionych po wszystkich obserwacjacj:
 
 ```{r, fig.height=3, fig.width=5, fig.align='center'}
 # oblicz jak wygląda uśredniona cyfra
@@ -225,18 +211,16 @@ digits_joined <- inner_join(train_2dim, average_digit, by = c("label", "x", "y")
 digit_distances <- digits_joined %>%
     group_by(label, instance) %>%
     summarize(euclidean_distance = sqrt(mean((value - mean_pixel_value) ^ 2)))
-
-digit_distances %>%
-    arrange(desc(euclidean_distance)) %>%
-    head(20)
 ```
-W dwudziestu pierwszych obserwacjach odległość euklidesowa ma wartość wyższą niż 80. 
 
-```{r}
+Odległości euklidesowe zwizualizowano na poniższych wykresach: 
+
+```{r, fig.height=3, fig.width=5, fig.align='center'}
 ggplot(digit_distances, aes(x = factor(label), y = euclidean_distance)) + 
     geom_boxplot() +
     xlab("cyfra") + 
-    ylab("odległość euklidesowa")
+    ylab("odległość euklidesowa") + 
+    ggtitle("Odległość euklidesowa od średniej")
 
 
 digit_distances %>%
@@ -245,9 +229,23 @@ digit_distances %>%
     ggplot(aes(x = as.factor(label), y = mean_distance)) + 
     geom_bar(stat = "identity") + 
     ylab("średnia odległość euklidesowa") + 
-    xlab("cyfra")
+    xlab("cyfra") +
+    ggtitle("Odległość euklidesowa od średniej")
     
 ```
+
+Największa wariancja występuja dla cyfry "1" - ma to najpewniej związek z faktem, że może być narysowana pod innymi kątami oraz ze "stopką". Z drugiej strony, jest to cyfra o najniższej średniej odległości, zatem większość jedynek jest do siebie podobna. Największe wartości średniej zaobserwowano dla cyfr "2", "5" i "8", nie są one jednak znacząco różne od pozostałych.
+
+Obliczona odległość euklidesowa pozwala na uszeregowanie cyfr względem jej wartości:
+
+```{r}
+digit_distances %>%
+    arrange(desc(euclidean_distance)) %>%
+    head(20) %>%
+    kable()
+```
+
+Na tej podstawie zwizualizowano te cyfry, które mają nawiększą wartość odległości euklidesowej, a więc najbardziej odbiegają od standardowego wyglądu:
 
 ```{r}
 
@@ -270,34 +268,31 @@ inner_join(train_2dim, highest_distances, by = c("label", "instance")) %>%
     theme(strip.text = element_blank())
 ```
 
+Rzeczywiście, duża wariancja wśród "1" wynika najprawdopodobniej z różnych kątów i jest ona także możliwą przyczyną wysokiej wartości odległości euklidesowej wśród "8". Wartości dla "2" i "5" wynikają z kolei przede wszyskim z charakteru pisma oraz grubości kreski.
 
-# Przygotowanie danych do modelowania
-https://www.youtube.com/watch?v=5bso_5X7Zu4
+# Sieci neuronowe
+
+## Głębokie sieci neuronowe
+
+### Przygotowanie danych do modelowania
+
+Przed treningiem sieci dane poddano normalizacji:
 ```{r}
 train_y <- train$label
 train_y <- as.factor(train_y)
 train_x <- train[, -1]
 
-dim(test)
-dim(train_x)
-
-# standaryzowanie danych
+# normalizacja danych do zakresu [0, 1]
 train_x <- ceiling(train_x / 255)
 test_x <- ceiling(test / 255)
 ```
 
-W celu łatwiejszej wizualizacji ustandaryzowanych danych posłużono się zmienną `{r} train_2dim`, wobec której zastosowano taką samą technikę standaryzacji wartości pikseli.
+W celu łatwiejszej wizualizacji ustandaryzowanych danych posłużono się zmienną *train_2dim*, wobec której zastosowano taką samą technikę standaryzacji wartości pikseli.
 
 ```{r, fig.height = 3, fig.width=5, fig.align='center'}
-ggplot(train_2dim, aes(ceiling(value / 255))) + 
-    geom_bar() + 
-    xlab("wartość") + 
-    ylab("liczba obserwacji") + 
-    ggtitle("Histogram liczby pikseli czarnych i białych")
-
 train_2dim %>%
     filter(instance <= 18) %>%
-    ggplot(aes(x, y, fill = ceiling(value / 255))) +
+    ggplot(aes(x, y, fill = value / 255)) +
     geom_tile(show.legend = FALSE) + 
     facet_wrap(facets = ~ label,
                dir = "v") + 
@@ -307,6 +302,7 @@ train_2dim %>%
     theme_void()
 ```
 
+Implementację sieci neuronowych przeprowadzono z wykorzystaniem biblioteki *keras*:
 
 ```{r}
 # wczytaj bibliotekę do głębokich sieci neuronowych
@@ -324,27 +320,21 @@ test_images <- test_images / 255
 
 ```
 
-Keras, jako danych wejściowych, wymaga macierzy. Obecny typ danych to lista:
+Wymagany przez Keras typ danych wejściowych to macierze, dlatego zbiorzy przekształcono z obecnego typu (lista):
 
 ```{r}
-typeof(train_images)
-typeof(test_images)
-```
-Zbiory przekształcono w typ macierzy:
-
-```{r}
-# keras wymaga macierzy jako typu danych wejściowych
 train_images <- as.matrix(train_images)
 test_image <- as.matrix(test_images)
 ```
 
-Dodatkowo należy zmienić typ danych zawierających klasy (cyfry). W przeciwnym wypadku byłyby traktowane jako wartości liczbowe, co prowadziłoby do nieprawidłowego wytrenowania modelu.
+Dodatkowo zmieniono typ danych zawierających klasy (cyfry). W przeciwnym wypadku byłyby traktowane jako wartości liczbowe, co prowadziłoby do nieprawidłowego wytrenowania modelu. Przykładowo, różnica między klasami "1" i "3" byłaby traktowana jako mniejsza niż pomiędzy "1" a "7". Funkcja *to_categorical()* pozwala zaimplementować technikę *one hot encoding*. W takiej reprezentacji klasa "1" będzie odpowiadała wektorowi [1, 0 , 0, ...], klasa "2" [0, 1, 0, ...] itd., co niweluje błąd wynikający z interpretacji poszczególnych klas jako liczb:
+
 ```{r}
 train_labels <- to_categorical(train_labels)
-str(train_labels)
 head(train_labels, 10)
 ```
-Definicja funkcji, która obliczone predykcje wpisuje do pliku, który następnie zostaje wysłany do Kaggle celem sprawdzenia poprawności predykcji.
+
+W kolejnym kroku zdefiniowano funkcję wpisującą obliczone predykcje klas do pliku, który następnie zostaje wysłany do Kaggle celem walidacji poprawności predykcji:
 
 ```{r}
 submitKaggle <- function(network) {
@@ -356,7 +346,10 @@ submitKaggle <- function(network) {
 } 
 ```
 
-Definicja modelu:
+### Przygotowanie modelu sztucznej sieci neuronowej
+
+Przy pomocy biblioteki _Keras_ w czytelny sposób można zaprojektować architekturę sieci neuronowej. Na początek zdefiniowano model składający się z tylko jednej warstwy zbudowanej z 512 neuronów z funkcją aktywacji _ReLU_, której wyjście podawane jest na warstwę wyjściową o rozmiarze odpowiadającej liczbie klas (10) oraz z funkcją aktywacji _softmax_. 
+W kompilacji wykorzystano optimizer RMSprop oraz kategoryczną entropię krzyżową jako funkcję straty wraz z dokładnością jako metryką uczenia sieci. Są to parametry startowe sugerowane przez twórców biblioteki _Keras_. Sieć trenowana jest przez 30 iteracji (_epochs_).
 ```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
 
 # keras - model 1
@@ -371,18 +364,15 @@ network %>% compile(
 
 model_1 <- network %>% fit(train_images, 
                            train_labels, 
-                           epochs = 10, 
+                           epochs = 30, 
                            batch_size = 128)
 
 plot(model_1)
 submitKaggle(network)
-
-
-# Kaggle 30 epochs 0.97885
-# Kaggle 10 epochs: 0.97857
 ```
 
-Otrzymaliśmy bardzo zadowalający wynik rzędu 97.89%. Pomimo dobrej dokładności, dalsza optymalizacja tego modelu jest utrudniona ze względu na to, że brak tu jakiejkolwiek kontroli na zbiorze treningowym. Przekłada się to na brak monitorowania i kontroli nad zjawiskiem overfittingu, a jedyną możliwością kontroli rzeczywistej dokładności modelu jest wysłanie wyników do Kaggle (limit 5 dziennie). Aby zoptymalizować model, podczas procedury treningu wydzielono losowo wybrane obserwacje stanowiące 20% zbioru treningowego. Z drugiej strony, spowoduje to najprawdopodobniej spadek dokładności modelu: zamiast 42 000 obserwacji do  trenowania modelu wykorzystanych zostanie 33 600. Po zoptymalizowaniu architektury sieci, trenowanie modelu będzie przeprowadzone na pełnym zbiorze treningowym. 
+Już przy tak prostej sieci otrzymano bardzo zadowalający wynik rzędu 97.89% (przy 30 iteracjach; dla 10 iteracji wyniósł on 97.857%). Pomimo dobrej dokładności, dalsza optymalizacja tego modelu jest utrudniona ze względu na brak jakiejkolwiek kontroli na zbiorze treningowym. Przekłada się to na brak monitorowania i kontroli nad zjawiskiem overfittingu, a jedyną możliwością kontroli rzeczywistej dokładności modelu jest wysłanie wyników do Kaggle (limit 5 dziennie). 
+Aby zoptymalizować model, podczas procedury treningu wydzielono losowo wybrane obserwacje stanowiące 20% zbioru treningowego (*validation_split=0.2*). Minusem tego rozwiązania jest zmniejszenie zbioru treningowego: zamiast 42 000 obserwacji do  trenowania modelu wykorzystanych zostanie 33 600, co przełoży się na niższą finalną dokładność modelu. Z tego powodu, po zoptymalizowaniu architektury sieci, trenowanie modelu będzie przeprowadzone na pełnym zbiorze treningowym. 
 
 ```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
 
@@ -403,27 +393,34 @@ model_2 <- network2 %>% fit(train_images,
                            validation_split = 0.2)
 
 plot(model_2)
-
-# Optimizer: rmsprop
-# units = 256 loss: 1.7884e-04 - accuracy: 1.0000 - val_loss: 0.1498 - val_accuracy: 0.9763
-# units = 512 loss: 4.0712e-04 - accuracy: 0.9999 - val_loss: 0.1437 - val_accuracy: 0.9792
-# units = 784 loss: 1.0470e-04 - accuracy: 1.0000 - val_loss: 0.1496 - val_accuracy: 0.9808
-
-# Optimizer: adam
-# units = 256 loss: 4.7305e-04 - accuracy: 1.0000 - val_loss: 0.1009 - val_accuracy: 0.9770
-# units = 512 loss: 2.8389e-04 - accuracy: 1.0000 - val_loss: 0.0938 - val_accuracy: 0.9802
-# units = 784 loss: 1.1348e-04 - accuracy: 1.0000 - val_loss: 0.0984 - val_accuracy: 0.9814
-
-# Batch sizes (for 512 units):
-# batch_size = 512: loss: 0.0033 - accuracy: 1.0000 - val_loss: 0.0866 - val_accuracy: 0.9760
-# batch_size = 256: loss: 8.8377e-04 - accuracy: 1.0000 - val_loss: 0.0871 - val_accuracy: 0.9790
-# batch_size = 128: loss: 2.8389e-04 - accuracy: 1.0000 - val_loss: 0.0938 - val_accuracy: 0.9802
-# batch_size = 32:  loss: 0.0041 - accuracy: 0.9986 - val_loss: 0.1683 - val_accuracy: 0.9754
 ```
 
-Widać tutaj, że parametr val_loss wzrasta wraz z kolejnymi iteracjami. Jest to skutek overfittingu, tj. model "zapamiętuje" dane i optymalizuje się pod kątem zbioru treningowego zamiast coraz lepiej klasyfikować obserwacje w zbiorze testowym.
+Wybór powyższej architektury został oparty na metrykach dla wielu różnych architektór sieci, które uzyskano zmieniając takie parametry jak: liczba neuronów w warstwie, typ optimizera (RMSprob i Adam) oraz różna wartość parametry *batch_size* (dla optimizera Adam).
 
-Zjawisko to jest jeszcze lepiej widoczne po dodaniu kolejnej warstwy:
+```{r, echo = FALSE}
+kable(rbind.data.frame(c(256, 1.7884e-04, 1.0000, 0.1498, 0.9763),
+                 c(512, 4.0712e-04, 0.9999, 0.1437, 0.9792),
+                 c(784, 1.0470e-04, 1.0000, 0.1496, 0.9808)),
+      col.names = c("units", "loss", "accuracy", "val_loss", "val_accuracy"),
+      caption = "Optimizer: rmsprop")
+
+kable(rbind.data.frame(c(256, 4.7305e-04, 1.0000 ,0.1009,0.9770),
+                      c(512, 2.8389e-04, 1.0000,0.0938,0.9802),
+                      c(784, 1.1348e-04, 1.0000,0.0984,0.9814)),
+      col.names = c("units", "loss", "accuracy", "val_loss", "val_accuracy"),
+      caption = "Optimizer: adam")
+
+kable(rbind.data.frame(c(512, 0.0033, 1.0000, 0.0866, 0.9760),
+                      c(256, 8.8377e-04, 1.0000, 0.0871, 0.9790),
+                      c(128, 2.8389e-04, 1.0000, 0.0938, 0.9802),
+                      c(32, 0.0041,0.9986, 0.1683, 0.9754)),
+      col.names = c("batch_size", "loss", "accuracy", "val_loss", "val_accuracy"),
+      caption = "Batch sizes (dla units = 512, optimizer = adam)")
+
+```
+
+Na wykresie metryk od iteracji widać jednak jednak, że parametr val_loss wzrasta nieznacznie wraz z kolejnymi iteracjami. Jest to skutek overfittingu, tj. model "zapamiętuje" dane i optymalizuje się pod kątem zbioru treningowego zamiast coraz lepiej klasyfikować obserwacje w zbiorze testowym. Zjawisko to jest jeszcze lepiej widoczne po dodaniu kolejnej warstwy:
+
 ```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
 knitr::opts_chunk$set(cache = TRUE)
 # model 3 - spróbujemy dodać więcej warstw
@@ -445,6 +442,8 @@ model_3 <- network3 %>% fit(train_images,
 
 # loss: 0.0082 - accuracy: 0.9978 - val_loss: 0.1524 - val_accuracy: 0.9768
 ```
+
+Finalnie owocuje to spadkiem dokładności predykcji do 97.68%. Aby zapobiegać overfittingowi do architektury sieci wprowadzono warstwy dropout (*layer_dropout()*). Ich zadaniem jest losowe przypisanie danym wejściowym wartości 0 (zerowanie wag), a parametrem regulującym liczbę wyzerowanych wartości jest parametrem _rate_. Przyjmując wartość 0.3 oznacza to, że 30% wag wejściowych zostanie przypisana wartość 0.
 
 ```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
 knitr::opts_chunk$set(cache = TRUE)
@@ -469,16 +468,22 @@ model_4 <- network4 %>% fit(train_images,
                             batch_size = 128, 
                             validation_split = 0.2)
 plot(model_4)
-
-
-
-# dropout rate = 0.7, 0.5   loss: 0.0801 - accuracy: 0.9750 - val_loss: 0.0764 - val_accuracy: 0.9774
-# dropout rate = 0.5, 0.5   loss: 0.0742 - accuracy: 0.9753 - val_loss: 0.0791 - val_accuracy: 0.9775
-# dropout rate = 0.45, 0.45 loss: 0.0294 - accuracy: 0.9902 - val_loss: 0.0976 - val_accuracy: 0.9808
-# dropout rate = 0.3, 0.3   loss: 0.0156 - accuracy: 0.9949 - val_loss: 0.0948 - val_accuracy: 0.9820 OVRF
-# dropout rate = 0.2, 0.2   loss: 0.0126 - accuracy: 0.9961 - val_loss: 0.1122 - val_accuracy: 0.9802
-# dropout rate = 0.3, 0.2   loss: 0.0133 - accuracy: 0.9953 - val_loss: 0.0963 - val_accuracy: 0.9811
 ```
+
+Powyższy model wybrano na podstawie kilku konfiguracji parametru _rate_ w obu warstwach typu dropout, a testowane kombinacje obejmowały:
+
+```{r, echo=FALSE}
+kable(rbind.data.frame(c(0.7, 0.5, 0.0801, 0.9750, 0.0764, 0.9774),
+c(0.5, 0.5,0.0742, 0.9753, 0.0791, 0.9775),
+c(0.45, 0.45,0.0294, 0.9902, 0.0976, 0.9808),
+c(0.3, 0.3,0.0156, 0.9949, 0.0948, 0.9820),
+c(0.2, 0.2,0.0126, 0.9961, 0.1122, 0.9802),
+c(0.3, 0.2, 0.0133, 0.9953, 0.0963, 0.9811)),
+      col.names = c("dropout_rate_1", "dropout_rate_2", "loss", "accuracy", "val_loss", "val_accuracy"),
+      caption = "Wpływ dropout_rate na metryki sieci")
+```
+Na podstawie wyników, jako optymalną wartość tego parametru wybrano 0.3 dla obu warstw.
+Dodanie kolejnej warstwy do modelu spowodowało jednak spadek dokładności, dlatego uznano, że optymalna architektura powinna zawierać dwie warstwy typu *dense* przeplecione dwiema warstwami typu *dropout*:
 
 ```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
 
@@ -505,14 +510,17 @@ model_5 <- network5 %>% fit(train_images,
                             batch_size = 128, 
                             validation_split = 0.2)
 plot(model_5)
-
-
-
-# hidden layers = 2   loss: 0.0156 - accuracy: 0.9949 - val_loss: 0.0948 - val_accuracy: 0.9820 OVRF
-# hidden layers = 3   loss: 0.0231 - accuracy: 0.9929 - val_loss: 0.1167 - val_accuracy: 0.9768
 ```
-Zabawa z learning rate:
 
+```{r}
+
+kable(rbind.data.frame(c(2, 0.0156, 0.9949, 0.0948, 0.9820),
+          c(3, 0.0231, 0.9929, 0.1167, 0.9768)),
+col.names = c("hidden_layers", "loss", "accuracy", "val_loss", "val_accuracy"),
+caption = "Metryki sieci dla różnej liczby warstw")
+```
+
+Jednym z najbardziej istotny parametrów w treningu sieci neuronowej jest szybkość uczenia sieci (ang. *learning rate*). Zgodnie z intuicją, wysoka wartość tego parametru poprawia szybkość uczenia sieci, ale można skutkować niższą dokładnością. Wybór zbyt niskiej szybkości uczenia może z kolei utrudnić znalezienie globalnego minimum jeśli w przestrzeni parametrów będą występować także minima lokalne.
 
 ```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
 learning_rates = c(0.01, 0.005, 0.001, 0.0005, 0.0001)
@@ -557,16 +565,17 @@ for (rate in learning_rates) {
 # hidden layers = 3   loss: 0.0231 - accuracy: 0.9929 - val_loss: 0.1167 - val_accuracy: 0.9768
 ```
 
-```{r}
+```{r, echo=FALSE}
 learning_rates_df <- rbind(accuracy_vector, loss_vector, val_accuracy_vector, val_loss_vector) %>%
                         data.frame()
 colnames(learning_rates_df) <- learning_rates
 
-print(learning_rates_df)
+kable(learning_rates_df)
 ```
 Na podstawie otrzymanych wyników widać, że najlepsze metryki otrzymano dla domyślnej wartości parametru learning_rate wynoszącej 0.001.
 
-Trening zoptymalizowanej sieci na całym (42 00 obserwacji) zbiorze treningowym:
+
+Na podstawie ustalonej powyżej architektury sieci, trenowanie przeprowadzono na całym (42 00 obserwacji) zbiorze treningowym:
 
 ```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
 mlp_network_final <- keras_model_sequential() %>% 
@@ -592,105 +601,357 @@ plot(model_final)
 
 submitKaggle(mlp_network_final)
 
-# Kaggle submission results:
-# epochs = 30  0.98028
-# epochs = 60  0.98128
-# epochs = 100 0.98057
-
 mlp_network_final_accuracy <- tail(model_final$metrics$accuracy, n = 1)
 mlp_network_final_loss <- tail(model_final$metrics$loss, n = 1)
 ```
 
+Dokładność sprawdzono dla różnej liczby iteracji, przy czym najlepszy wynik Kaggle uzyskano dla 60 (*epochs = 60*). Niższa dokładność przy 100 iteracjach mogła wynikać z niewielkiego overfittingu sieci, a przy 30 ze zbyt krótkiej procedury treningowej (funkcja nie osiągała globalnego minimum).
+
 ```{r, echo = FALSE, cache = TRUE}
 cat("accuracy: ", mlp_network_final_accuracy, "\n")
 cat("loss: ", mlp_network_final_loss, "\n")
+
+kable(rbind.data.frame(c(30, 0.98028),
+                       c(60,  0.98128),
+                       c(100, 0.98057)),
+                       col.names = c("epochs", "Kaggle score"),
+                       caption = "Wyniki z Kaggle dla różnej liczby iteracji")
 ```
 
-```{r}
-# # data_frame z prawdziwą i przewidzianą klasą
-# model_1
-# model_2
-# pred_class <- predict_classes(network, 
-#                               train,
-#                               batch_size = 32,
-#                               verbose = 1)
-# 
-# train_df <- tibble(train_images = apply(train_images, 1, which.max) - 1, pred_class)
-# table(train_df)
-```
 
-# Konwolucyjne sieci neuronowe (CNN)
-Konwolucyjne sieci neuronow (ang. _convolutional neural networks_, CNNs) są często wykorzystywane do klasyfikacji obrazów. Ich przewaga nad wielowarstwowymi sieciami polega na tym, że dane wejściowe nie muszą zostać przekształcone do postaci jednowymiarowego wektora. Obniżenie wymiarowości danych (w opisywanym przypadku z dwuwymiarowej macierzy do jendowymiarowego wektora) sprawia, że utracona zostaje informacja, które piksele ze sobą sąsiadują w oryginalnym obrazie. 
+## Konwolucyjne sieci neuronowe (CNN)
 
-# https://www.kaggle.com/timokerremans/cnn-for-minst-dataset
+Konwolucyjne sieci neuronowe są często wykorzystywane do klasyfikacji obrazów. Ich przewaga nad wielowarstwowymi sieciami polega na tym, że dane wejściowe nie muszą zostać przekształcone do postaci jednowymiarowego wektora. Obniżenie wymiarowości danych (w opisywanym przypadku z dwuwymiarowej macierzy do jendowymiarowego wektora) sprawia, że utracona zostaje informacja, które piksele ze sobą sąsiadują w oryginalnym obrazie. 
+
+### Trening CNN
+
+Konwolucyjne sieci neuronowe wymagają znacznie większej mocy obliczeniowej niż klasyczne perceptrony. Dla przykładu, trening opisanych wyżej sieci zajmował ok. 20 minut (przy 30 iteracjach), a nawet dla nieskomplikowanej CNN czas ten zwiększył się do ok. 80 minut. Z tego względu zdecydowano przenieść się obliczenia na platformę Google Cloud Platform, pozwalającą na użycie większej mocy obliczeniowej oraz trenowanie sieci na jednostkach GPU, skracając tym samym czas do ok. 20 minut.
+^[Jednym z zakładanych celów pracy miało być przeprowadzenie optymalizacji hiperparametrów (ang. _hyperparameter tuning_) sieci CNN celem znalezienia najlepszej konfiguracji. Metoda ta polega na sprawdzeniu wielu różnych architektór różniących się tzw. hiperparametrami, czyli np. rozmiarem warstwy filtrującej, rozmiarem kernela, funkcji aktywacji, wyboru optimizera czy doboru szybkości uczenia. Niestety, rozwój biblioteki _cloudml_ nie nadąża za zmianami na Google Cloud Platform (używa m. in. niewspieranego już Pythona 2.7 zamiast 3.5 oraz innej wersji runtime). W efekcie metryki modelu (dokładność) nie są poprawnie zwracane do API platformy, co uniemożliwa optymalizację hiperparametrów z wykorzystaniem tej biblioteki.]
+
+### Implementacja CNN
+
 Dane przekształcić można do postaci dwuwymiarowej z wykorzystaniem funkcji array_reshape() z pakietu keras:
 
 ```{r}
 library(keras)
+train_data_path <- "./train.csv"
+test_data_path <- "./test.csv"
+
+train <- read_csv(train_data_path)
+test <- read_csv(test_data_path)
+
+y_train <- to_categorical(train$label, num_classes = 10)
+x_train <- train[, -1] %>% as.matrix()
+x_test <- test %>% as.matrix
+
 img_rows <- 28
 img_cols <- 28
 
-train_x <- as.matrix(train_x)
-train_y <- as.matrix(train_y)
-test_x <- as.matrix(test_x)
+x_train <- x_train / 255
+x_test <- x_test / 255
 
-train_x_cnn <- keras::array_reshape(train_x, c(nrow(train_x), img_rows, img_cols, 1))
-test_x_cnn <- keras::array_reshape(test_x, c(nrow(test_x), img_rows, img_cols, 1))
+x_train <- array_reshape(x_train, c(nrow(x_train), img_rows, img_cols, 1))
+x_test <- array_reshape(x_test, c(nrow(x_test), img_rows, img_cols, 1))
 
-train_x_cnn <- train_x_cnn / 255
-test_x_cnn <- test_x_cnn / 255
-
-input_shape <- c(dim(train_x_cnn)[-1])
+input_shape <- c(dim(x_train)[-1])
 ```
 
-```{r}
+### Architektura sieci
+
+Ze względu na konieczność wykorzystania płatnej usługi Google Cloud Platform, zamiast iteracyjnie testować różne modele, zdecydowano się na implementację już opublikowanej architektury sieci oraz metodologii przygotowania danych: https://www.kaggle.com/couyang/easiest-cnn-with-99-6-accuracy-using-keras-top-5 
+
+Architektura sieci wygląda następująco:
+```{r, eval = FALSE}
 model_cnn <- keras_model_sequential() %>%
-    layer_conv_2d(filters = 128, 
-                  kernel_size = c(5, 5), 
-                  activation = 'relu', 
-                  padding = 'same', 
-                  input_shape = input_shape) %>%
-    layer_batch_normalization() %>%
-    layer_conv_2d(filters = 64, 
-                  kernel_size = c(5, 5), 
-                  activation = 'relu', 
-                  padding = 'same', 
-                  input_shape = input_shape) %>%
-    layer_batch_normalization() %>%
-    layer_max_pooling_2d(pool_size = c(2, 2)) %>%
-    layer_dropout(rate = 0.25) %>%
-    layer_flatten() %>%
-    layer_dense(units = 512, activation = "relu") %>%
-    layer_dropout(rate = 0.3) %>%
-    layer_dense(units = 512, activation = "relu") %>%
-    layer_dropout(rate = 0.3) %>%
-    layer_dense(units = 10, activation = "softmax")
+  
+  layer_conv_2d(filters = 128, 
+                kernel_size = c(5, 5), 
+                activation = 'relu', 
+                padding = 'same', 
+                input_shape = input_shape) %>%
+  layer_batch_normalization() %>%
+  layer_conv_2d(filters = 64, 
+                kernel_size = c(5, 5), 
+                activation = 'relu', 
+                padding = 'same', 
+                input_shape = input_shape) %>%
+  layer_batch_normalization() %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_dropout(rate = 0.25) %>%
+  
+  layer_conv_2d(filters = 64,
+                kernel_size = c(3, 3),
+                activation = 'relu',
+                padding = 'same') %>%
+  layer_batch_normalization() %>%
+  layer_conv_2d(filters = 64,
+                kernel_size = c(3, 3),
+                activation = 'relu',
+                padding = 'same') %>%
+  layer_batch_normalization() %>%
+  layer_max_pooling_2d(pool_size = c(2, 2),
+                       strides = c(2, 2)) %>%
+  layer_dropout(rate = 0.25) %>%
+  
+  layer_conv_2d(filters = 64,
+                kernel_size = c(3, 3),
+                activation = 'relu',
+                padding = 'same') %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = 0.25) %>%
+  
+  layer_flatten() %>%
+  layer_dense(units = 256, activation = "relu") %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = 0.25) %>%
+    
+  layer_dense(units = 10, activation = "softmax")
 
 model_cnn %>% compile(
-  optimizer = "adam",
+  optimizer = optimizer_rmsprop(epsilon = 1e-08),
   loss = "categorical_crossentropy", 
   metrics = c("accuracy"))
-
-summary(model_cnn)
-dim(train_x_cnn)
-dim(train_labels)
-
-model_cnn_history <- model_cnn %>% fit(train_x_cnn, 
-                                     train_labels, 
-                                     epochs = 60, 
-                                     batch_size = 128,
-                                     learning_rate = 0.001)
-plot(model_cnn_history)
 ```
 
+Zmodyfikowano także funkcję wpisującą wyniki do pliku wysyłanego do Kaggle:
+
+```{r, eval = FALSE}
+submitKaggleCNN <- function(network) {
+    predictions <- network %>%
+                    predict_classes(x_test)
+    submit_predictions <-  read.csv("./sample_submission.csv")
+    submit_predictions$Label <- predictions
+    write.csv(submit_predictions, "./sample_submission_CNN_aug.csv", row.names = FALSE)
+} 
+
+submitKaggleCNN(load_model_hdf5("model_aug_lr_reduction_epochs_50.h5"))
+```
+
+Wynik Kaggle osiągnięty przez tę sieć wyniósł 99.457%. Ocenia się jednak, że maksymalny wynik, jaki może zostać osiągnięty przez sieć CNN na zbiorze MNIST to ok. 99.7%. Aby jednak zbliżyć się do tego rezultatu, należy wprowadzić kilka poprawek do metodologii trenowania sieci.
+
+
+### Poszerzanie zbioru danych
+
+Poszerzanie zbioru danych (and. data augmentation) polega na wprowadzeniu niewielkich modyfikacji w danych treningowych i połączeniu ich z oryginalnym zbiorem. Dzięki temu otrzymywany jest zwiększony zbiór, w których nowymi obserwacjami są lekko zmienione wersje pierwotnych danych. Wprowadzane zmiany muszą być na tyle niewielkie, żeby model był w stanie poprawnie przyporządkować obserwacje do właściwych klas. Istnieje wiele parametrów pozwalących na modyfikacje obrazów, ale do poszerzenia zbioru zdecydowano się na: zmianę szerokości i wysokości ± 15%, powiększenie ± 15% , obrót o 15 stopni i odkształcenie (wyrażone miarę kąta w radianach).
+```{r, eval = FALSE}
+datagen <- image_data_generator(featurewise_center = F,
+                                samplewise_center=F,
+                                featurewise_std_normalization = F,
+                                samplewise_std_normalization=F,
+                                zca_whitening=F,
+                                horizontal_flip = F,
+                                vertical_flip = F,
+                                width_shift_range = 0.15,
+                                height_shift_range = 0.15,
+                                zoom_range = 0.15,
+                                rotation_range = .15,
+                                shear_range = 0.15
+                                )
+
+datagen %>% fit_image_data_generator(x_train)
+```
+
+Ze względu na zmodyfikowany zbiór treningowy, do trenowania modelu wykorzystano funkcję fit_generator i flow_images_from_data, która generuje paczki danych wymagane do trenowania. Szybkość uczenia kontrolowana jest za pomocą parametru callbacks.
+
+```{r, eval = FALSE}
+model %>% fit_generator(flow_images_from_data(x_train, 
+                                      y_train, 
+                                      datagen, 
+                                      batch_size = FLAGS$batch_size),
+                steps_per_epoch = nrow(x_train)/64, 
+                epochs = 30, 
+                verbose = 1,
+                callbacks = learning_rate_reduction)
+```
+
+Z uwagi na skomplikowaną architekturę sieci, wszystkim parametrom przypisano te same wartości. Walidację przeprowadzono dla wartości 0.15 i 0.1, uzyskując odpowiednio 99.557% i 99.428%. 
+
+### Redukcja szybkości uczenia
+
+Szybkość uczenia modelu jest uważana za hiperparametr, który najmnocniej wpływa na finalną dokładność modelu. Szybkie uczenie zmniejsza czas potrzebny na wytrenowanie modelu, ale może skutkować jego niższą dokładnością. Z drugiej strony, stosując bardzo niskie szybkości uczenia modelu, model może znaleźć się w minimum lokalnym. Dobrą praktyką jest stopniowe zmniejszanie szybkości uczenia, jeśli zmiany dokładności modelu pomiędzy kolejnymi iteracjami są bardzo małe. Keras posiada wbudowaną funkcję `r callback_reduce_lr_on_plateau()`, która pozwala zaimplementować zmiany szybkości uczenia:
+
+```{r eval = FALSE}
+learning_rate_reduction <- callback_reduce_lr_on_plateau(monitor = "acc",
+                                     patience = 3,
+                                     verbose = 1,
+                                     factor = 0.5,
+                                     min_lr = 0.00001)
+```
+
+Wprowadzenie tej poprawki pozwoliło na uzyskanie wyniku 99.642%, zbliżonego do limitu możliwości sieci konwolucyjnych. Zwiększenie liczby iteracji do 50 spowodowało z kolei spadek dokładności do 99.485%, dlatego za najlepszy model przyjęto ten uzyskany przy 30 iteracjach.
+
+# Walidacja modelu
+
+## Walidacja na podstawie pełnego zbioru treningowego MNIST
+
+Walidację modelu zdecydowano się sprawdzić na pełnym zbiorze treningowym MNIST, zawierającym 60 000 obserwacji. Należy tutaj jednak zaznaczyć, że nie jest to w pełni prawidłowa walidacja. Obserwacje w zbiorze treningowym Kaggle pokrywają się z tymi w zbiorze MNIST, więc częśćiowo są to te same dane, na których wytrenowano model. Zdecydowano się przestawić ten krok, ponieważ zbiór Kaggle był mniejszy od zbioru MNIST (odpowiednio 42 000 i 60 000 obs.), a zatem część cyfr z pełnego zbioru nie była zawarta w zbiorze Kaggle. 
+
+```{r, cache = TRUE, message=FALSE, warning=FALSE}
+# pełny zbiór treningowy MNIST
+validate_set <- read_csv("./mnist_full.csv")
+
+x_val_set <- validate_set[, -1]
+y_val_set <- validate_set$label
+
+x_val_set <- array_reshape(as.matrix(x_val_set), c(nrow(x_val_set), 28, 28, 1))
+
+x_val_set <- ceiling(x_val_set / 255)
+pred_val_set <- load_model_hdf5("model_aug_lr_reduction.h5") %>%
+                  predict_classes(x_val_set)
+```
+
+Na podstawie tablicy pomyłek widać, że większość cyfr została sklasyfikowana poprawnie.
+```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
+pred_df <- tibble(y_val_set, pred_val_set)
+
+print(table(pred_df))
+
+# tablica pomyłek z klasami przewidzianymi poprawnie
+count(pred_df, y_val_set, pred_val_set) %>%
+  ungroup() %>%
+  ggplot(aes(x = as.factor(y_val_set), y = as.factor(pred_val_set))) +
+  geom_tile(aes(fill = n), colour = "white") +
+  scale_fill_viridis_c(na.value="#FFFFFF00") +
+  theme(panel.grid.major = element_blank()) +
+  ylab("Przewidziana klasa") + 
+  xlab("Prawdziwa klasa") +
+  ggtitle("Tablica pomyłek z klasami przewidzianymi poprawnie")
+```
+
+Aby zapewnić lepszą przejrzystość, odfiltrowano poprawne obserwacje na diagonalnej. Dzięki temu skala lepiej:
+```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
+count(pred_df, y_val_set, pred_val_set) %>%
+  ungroup() %>%
+  filter(y_val_set != pred_val_set) %>%
+  ggplot(aes(x = as.factor(y_val_set), y = as.factor(pred_val_set))) +
+  geom_tile(aes(fill = n), colour = "white") +
+  scale_fill_viridis_c(na.value="#FFFFFF00") +
+  theme(panel.grid.major = element_blank()) +
+  ylab("Przewidziana klasa") + 
+  xlab("Prawdziwa klasa") +
+  ggtitle("Tablica pomyłek z odfiltrowanymi poprawnie przewidzianymi klasami")
+  
+```
+Największa liczba błędnych klasyfikacji przypada na 4 (prawdziwa klasa) i 9 (predykcja); model często mylił także 5 z 6, 5 z 8 oraz 1 z 7. W przypadku odręcznego pisma, niewielkie zmiany długości lub kształtu niektórych fragmentów tych cyfr łatwo mogą doprowadzić do błędnej klasyfikacji.
+
+
+## Walidacja na podstawie zdjęć pisma odręcznego
+Sprawdzono, w jaki sposób model poradzi sobie z klasyfikacją cyfr niepochodzących ze zbioru MNIST, ale pobranego od dwóch osób. Cyfry zostały napisane odręcznie, a zdjęcia obrobione za pomocą biblioteki EBImage.
+```{r, warning=FALSE, message=FALSE}
+if (!require("EBImage")) {
+  chooseCRANmirror(ind = 0)
+  install.packages("BiocManager")
+  BiocManager::install("EBImage")
+} else {
+  library(EBImage)
+}
+```
+
+
+Zdjęcia przetworzono za pomocą oprogramowania IrfanView, aby obrazy z cyframi miały taki sam rozmiar. 
+```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE}
+file_list <- list.files(pattern = "*.jpg")
+
+pic_list <- list()
+
+for (i in 1:length(file_list)) {
+  pic_list[[i]] <- readImage(file_list[[i]])
+}
+
+par(mfrow = c(2, 5))
+for (i in 1:length(pic_list)) {
+  plot(pic_list[[i]])
+}
+```
+Obróbka obrazów polegała na doprowadzeniu ich do takiej postaci, w jakiej znajdowały się dane treningowe. Przetwarzanie obrazów obejmowało po kolei: konwersję na skalę szarości, zmniejszenie rozmiaru do 28x28 pikseli, zmianę kodowania koloru (w pakiecie EBImage 0 jest kodowane jako czarny, 1 jako biały, czyli odwrotnie niż w przypadku poprzednich danych), zmianę kształtu wymaganego przez sieć konwolucyjną i wreszcie połączenie w jeden zbiór danych.
+
+```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE, message=FALSE}
+# konwersja na skalę szarości
+for (i in 1:length(pic_list)) {
+  colorMode(pic_list[[i]]) <- Grayscale
+}
+
+# zmiana rozmiarów
+for (i in 1:length(pic_list)) {
+  pic_list[[i]] <- resize(pic_list[[i]], 28, 28)
+}
+
+# narysuj przekształcone cyfry
+par(mfrow = c(2, 5))
+for (i in 1:length(pic_list)) {
+  plot(pic_list[[i]])
+}
+par(mfrow = c(1, 1))
+# zmiana kodowania koloru
+for (i in 1:length(pic_list)) {
+ pic_list[[i]] <- 1 - pic_list[[i]][,,1]
+}
+
+# zmiana kształtu danych wejściowych do (10, 28, 28, 1)
+for (i in 1:length(pic_list)) {
+  pic_list[[i]] <- array_reshape(pic_list[[i]], c(28, 28, 1))
+}
+
+# połączenie w jeden zbiór danych
+my_handwritten_digits <- NULL
+
+for (i in 1:length(pic_list)) {
+  my_handwritten_digits <- rbind(my_handwritten_digits, pic_list[[i]])
+}
+```
+
+Widać, że operacje te spowodowały znaczne pogorszenie jakości cyfr, jednak dla człowieka w dalszym ciągu są od siebie odróżnialne. Kolejne przekształcenia służą doprowadzeniu zdjęć do takiej samej postaci, jak dane ze zbioru treningowego (normalizacja do zakresu [0, 1] oraz zmiana struktury danych). 
 
 ```{r}
-#train_df %>%
-#     count(train_images, pred_class) %>%
-#     ungroup() %>%
-#     filter(train_images != pred_class) %>%
-#     ggplot() + 
-#         geom_tile(aes(as.factor(train_images), as.factor(pred_class), fill = n))
-        
+x_handwritten <- ceiling(my_handwritten_digits)
 
+x_handwritten <- array_reshape(x_handwritten, c(nrow(x_handwritten), 28, 28, 1))
+
+y_handwritten <- rep(0:9, 2)
 ```
+
+Predykcję klas przeprowadzono za pomocą modelu, który osiągnął najlepszy wynik w rankingu Kaggle i wykreślono tablicę pomyłek: 
+
+```{r, cache = TRUE}
+# predykcja klas
+pred_handwritten <- load_model_hdf5("model_aug_lr_reduction.h5") %>%
+          predict_classes(x_handwritten)
+
+handwritten_tibble <- tibble(y_handwritten, pred_handwritten)
+```
+
+
+```{r, fig.height = 3, fig.width=5, fig.align='center', cache = TRUE, message=FALSE}
+handwritten_tibble %>%
+  count(y_handwritten, pred_handwritten) %>%
+  ungroup() %>%
+  ggplot(aes(x = as.factor(y_handwritten), y = as.factor(pred_handwritten))) +
+  geom_tile(aes(fill = n), colour = "white") +
+  scale_fill_viridis_c(na.value="#FFFFFF00") +
+  theme(panel.grid.major = element_blank()) +
+  ylab("Przewidziana klasa") +
+  xlab("Prawdziwa klasa") +
+  ggtitle("Tablica pomyłek dla klasyfikacji odręcznego pisma")
+```
+
+Na podstawie tablicy pomyłek widać wyraźnie, że model nie miał żadnych problemów z klasyfikacją cyfr - wszystkie zostały przyporządkowane do prawidłowych klas. Należy zwrócić jednak uwagę, że nie były to wymagające przypadki, wszystkie cyfry posiadały bowiem standardowy kształt, rozmiar i nie były pochylone bądź przesunięte względem środka obrazu.
+
+# Podsumowanie
+
+W niniejszej pracy przedstawiono analizę eksploracyjną zbioru MNIST zawierającego zestaw odręcznie pisanych cyfr. Opracowane modele opierają się na głębokich sieciach neuronowych. Nawet mało skomplikowane struktury są w stanie z zadowalającą dokładnością (tj. powyżej 96%) rozpoznawać cyfry. Aby jednak zwiększyć dokładność predykcji, należało wprowadzić wiele poprawek do modelu: zmienić typ sieci z typu wielowarstwowego perceptronu na konwolucyjną sieć neuronową, dodać funkcje filtrujące, rozszerzyć zbiór danych o obrazy obrócone o pewien niewielki kąt oraz regulować tempo uczenia, aby funkcja lepiej przybliżała minimum.
+Podczas pracy przesłano wyniki opracowanego modelu do Kaggle - najlepszy model oparty o konwolucyjną sieć neuronową osiągnął dokładność 99.642%, co pozwoliło na uplasowanie na 266 miejscu w konkursie (na 2881 uczestników), co pozwoliło znaleźć się w gronie 10% najlepszych wyników. 
+![Miejsce w konkursie Kaggle](Kaggle_score.png)
+W tym miejscu należy jednak zwrócić uwage, że duża część uczestników uzyskała dokładność 100%. Aby osiągnąć taki wynik, należy posunąć się do kilku "sztuczek". Najprawdopodobniej osoby te trening swoich modelu przeprowadzały na pełnym zbiorze MNIST (70 000 obserwacji), który podzielony jest na zbiór treningowy (60 000 obs.) i testowy (10 000 obs.). Zbiory na platformie Kaggle odzielone są odpowiednio na 42 000 i 28 000 obserwacji. Nieznane cyfry ze zbioru testowego Kaggle zawarte są w pełnym zbiorze MNIST, co z kolei powoduje, że model trenowany jest na tych samych danych, na których jest walidowany. Doprowadzając do overfittingu, w łatwy sposób uzyskać można dokładność rzędu 100%. Na dzień pisania tej pracy 61 pierwszych miejsc w rankingu ma taką wartość dokładności.
+Uznaje się, że granica ludzkich możliwościw rozpoznawaniu cyfr ze zbioru MNIST to 99.8%, wynikająca także z faktu, że część cyfr w oryginalnym zbiorze jest przypisana do niepoprawnej klasy. Zaproponowany model, niewymagający dużych nakładów obliczeniowych, wypada więc nieco gorzej, ale pokazano, że jest w stanie poprawnie sklasyfikować cyfry o "standardowym" kształcie.
+
+# Bibliografia
+Podczas pisania niniejszej pracy korzystano z poniższych źródeł:
+
+1. https://www.r-bloggers.com/exploring-handwritten-digit-classification-a-tidy-analysis-of-the-mnist-dataset/
+2. http://repository.supsi.ch/5145/1/IDSIA-04-12.pdf
+3. https://www.kaggle.com/kobakhit/digital-recognizer-in-r
+4. https://rrighart.github.io/Digits/
+5. https://www.kaggle.com/srlmayor/easy-neural-network-in-r-for-0-994
+6. http://varianceexplained.org/r/digit-eda/
+7. https://blog.prokulski.science/
+8. https://www.kaggle.com/timokerremans/cnn-for-minst-dataset
